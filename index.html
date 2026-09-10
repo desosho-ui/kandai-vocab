@@ -3483,6 +3483,10 @@ const ALLDATA = JSON.parse(document.getElementById('vocabData').textContent);
    設定画面からいつでも変更でき、変更すると読み込み直す。
    学習記録は語のIDで管理しているので、クラスを変えても消えない。 */
 var MUST_PICK_CLASS = false;      /* クラス未選択のあいだ true（var なので早い時点から参照できる） */
+/* QRコードのテストを開いているか。受験者にはクラスを訊かない（出題範囲はテスト側で決まっているため） */
+const EXAM_LINK = /[#&]t=/.test(location.hash || '');
+/* 受験者が名乗るクラス（時間割のコマ）。テスト作成時の初期値。 */
+const EXAM_CLASSES = ["月1", "月2", "月3", "水3", "水4", "木1", "木3", "土1", "土2", "土3"];
 const CLASSES = [{"id": "1LS", "name": "1年 L&S", "icon": "🎧", "sub": "Listening & Speaking"}, {"id": "1RW", "name": "1年 R&W", "icon": "📘", "sub": "Reading & Writing"}, {"id": "2RW", "name": "2年 R&W", "icon": "📗", "sub": "Reading & Writing"}, {"id": "4RW", "name": "4年 R&W", "icon": "📕", "sub": "Reading & Writing"}];
 const CLSKEY  = 'kandaiVocab.v1.class';
 function savedClass(){ try{ return localStorage.getItem(CLSKEY)||''; }catch(e){ return ''; } }
@@ -4247,9 +4251,11 @@ function speakSample(){
 }
 audInit();   // ← audBase/audNorm を定義したあとに呼ぶ（constは巻き上げ対象外）
 
-/* クラス未選択なら、まずクラスを選ばせる */
+/* クラス未選択なら、まずクラスを選ばせる。
+   ただしQRコードからテストを開いた学生には訊かない（そのテストの出題範囲は
+   作成時に決まっており、学生のクラス設定は使わないため）。 */
 renderClassBar();
-if(!isValidClass(PICKED_CLASS)) renderClassPicker(true);
+if(!EXAM_LINK && !isValidClass(PICKED_CLASS)) renderClassPicker(true);
 const clsCancelBtn=$('#clsCancel'); if(clsCancelBtn) clsCancelBtn.onclick=closeClassPicker;
 const clsCloseBtn=$('#clsClose'); if(clsCloseBtn) clsCloseBtn.onclick=closeClassPicker;
 const clsSettingsBtn=$('#clsSettings'); if(clsSettingsBtn) clsSettingsBtn.onclick=()=>renderClassPicker(false);
