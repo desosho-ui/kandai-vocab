@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ジェスチャー検知テスト — VOCABMATE</title>
+<style>
+:root{--bg:#FFF6EC;--panel:#fff;--ink:#1E1B33;--sub:#77729B;--edge:#1E1B33;
+      --line:#EFE9F8;--p1:#6C4DF6;--p1s:#EDE7FF;--p2:#FF4D9D;--p2s:#FFE6F1;
+      --p3:#00C896;--p3s:#DCFBF1;--p4:#FFC53D;--p4s:#FFF4D6}
+@media (prefers-color-scheme:dark){
+ :root{--bg:#14121F;--panel:#221E33;--ink:#F6F3FF;--sub:#9E97C4;--edge:#524A80;
+       --line:#332C4C;--p1s:#312A56;--p2s:#4A2340;--p3s:#12402F;--p4s:#463516}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.7;
+ font-family:"Hiragino Maru Gothic ProN","Hiragino Kaku Gothic ProN","Yu Gothic",-apple-system,sans-serif;
+ padding:16px;padding-bottom:40px}
+h1{font-size:19px;margin:0 0 4px}
+.sub{color:var(--sub);font-size:13px;margin:0 0 14px}
+.card{background:var(--panel);border:2.5px solid var(--edge);border-radius:18px;
+ box-shadow:0 5px 0 var(--edge);padding:14px 15px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 8px}
+ol{margin:0;padding-left:20px}
+ol li{margin-bottom:9px}
+b.g{color:var(--p1)}
+.counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}
+.cnt{background:var(--p1s);border:2px solid var(--edge);border-radius:12px;padding:8px 10px}
+.cnt .n{font-size:22px;font-weight:900;line-height:1.2}
+.cnt .l{font-size:11px;color:var(--sub);font-weight:800;word-break:break-all}
+.cnt.hit{background:var(--p2s)}
+#log{font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.55;
+ background:var(--panel);border:2px solid var(--edge);border-radius:12px;
+ padding:10px;max-height:46vh;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+button{font:inherit;font-weight:900;border:2.5px solid var(--edge);border-radius:13px;
+ padding:11px 15px;background:var(--p1);color:#fff;box-shadow:0 4px 0 var(--edge);
+ cursor:pointer;-webkit-tap-highlight-color:transparent}
+button.g{background:var(--panel);color:var(--ink)}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--edge)}
+.state{font-weight:900;font-size:14px}
+.ok{color:var(--p3)}.ng{color:var(--p2)}
+.note{background:var(--p4s);border:2px solid var(--edge);border-radius:12px;
+ padding:10px 12px;font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>📱 ジェスチャー検知テスト</h1>
+<p class="sub">iPhone で操作したとき、Webページに何のイベントが届くかを調べます。VOCABMATE 本体とは無関係で、記録も送信もしません。</p>
+
+<div class="card">
+  <h2>試してほしい操作</h2>
+  <ol>
+    <li><b class="g">下から少しだけスワイプして止め、隣のアプリを覗いて戻す</b>（いちばん知りたい操作）</li>
+    <li>ホームバーを<b class="g">左右にスワイプ</b>して隣のアプリに移り、すぐ戻る</li>
+    <li>下から上に完全にスワイプして<b class="g">ホーム画面</b>に戻り、Safari に戻る</li>
+    <li>画面上から下に引いて<b class="g">通知センター</b>を開き、閉じる</li>
+    <li>右上から下に引いて<b class="g">コントロールセンター</b>を開き、閉じる</li>
+    <li><b class="g">電源ボタンで画面を消して</b>、また点ける</li>
+  </ol>
+  <div class="note">1つ操作するごとに、下の記録がどう増えるか見てください。何も増えない操作があれば、それが「検知できない操作」です。</div>
+</div>
+
+<div class="card">
+  <h2>いまの状態</h2>
+  <div class="state">visibilityState：<span id="vs">—</span></div>
+  <div class="state">hasFocus()：<span id="hf">—</span></div>
+</div>
+
+<div class="card">
+  <h2>発火した回数</h2>
+  <div class="counts" id="counts"></div>
+</div>
+
+<div class="card">
+  <h2>記録</h2>
+  <div id="log">（ここに出ます）</div>
+  <div class="row">
+    <button id="copy">📋 記録をコピー</button>
+    <button class="g" id="clear">クリア</button>
+  </div>
+  <div class="note">コピーしてチャットに貼っていただければ、どの信号で検知できるか判断して本体に組み込みます。</div>
+</div>
+
+<script>
+const EVENTS = ['visibilitychange','blur','focus','pagehide','pageshow',
+                'freeze','resume','resize','orientationchange',
+                'touchstart(下端)','touchcancel','hasFocus→false','hasFocus→true'];
+const counts = {}; EVENTS.forEach(e => counts[e] = 0);
+const t0 = Date.now();
+const lines = [];
+const $ = s => document.querySelector(s);
+
+function stamp(){ return ((Date.now()-t0)/1000).toFixed(2).padStart(7,' ') + 's'; }
+function log(name, detail){
+  if(counts[name] !== undefined) counts[name]++;
+  lines.unshift(`${stamp()}  ${name}${detail ? '  ' + detail : ''}`);
+  if(lines.length > 200) lines.pop();
+  render();
+}
+function render(){
+  $('#log').textContent = lines.length ? lines.join('\n') : '（ここに出ます）';
+  $('#counts').innerHTML = EVENTS.map(e =>
+    `<div class="cnt${counts[e]?' hit':''}"><div class="n">${counts[e]}</div><div class="l">${e}</div></div>`
+  ).join('');
+  $('#vs').textContent = document.visibilityState;
+  $('#vs').className = document.visibilityState === 'visible' ? 'ok' : 'ng';
+  const f = document.hasFocus();
+  $('#hf').textContent = f ? 'true' : 'false';
+  $('#hf').className = f ? 'ok' : 'ng';
+}
+
+document.addEventListener('visibilitychange', () => log('visibilitychange', '→ ' + document.visibilityState));
+window.addEventListener('blur',  () => log('blur'));
+window.addEventListener('focus', () => log('focus'));
+window.addEventListener('pagehide', e => log('pagehide', 'persisted=' + e.persisted));
+window.addEventListener('pageshow', e => log('pageshow', 'persisted=' + e.persisted));
+document.addEventListener('freeze', () => log('freeze'));
+document.addEventListener('resume', () => log('resume'));
+window.addEventListener('resize', () => log('resize', innerWidth + '×' + innerHeight));
+window.addEventListener('orientationchange', () => log('orientationchange'));
+
+/* 画面下端から始まったタッチ＝ホームバーのジェスチャーの可能性 */
+window.addEventListener('touchstart', e => {
+  const y = e.touches[0] ? e.touches[0].clientY : 0;
+  if(y > innerHeight - 40) log('touchstart(下端)', 'y=' + Math.round(y));
+}, {passive:true});
+window.addEventListener('touchcancel', () => log('touchcancel'), {passive:true});
+
+/* イベントが飛ばない場合の保険として、フォーカス状態を細かく見張る */
+let lastFocus = document.hasFocus();
+setInterval(() => {
+  const f = document.hasFocus();
+  if(f !== lastFocus){ lastFocus = f; log(f ? 'hasFocus→true' : 'hasFocus→false'); }
+  else render();
+}, 200);
+
+$('#clear').onclick = () => { lines.length = 0; EVENTS.forEach(e => counts[e] = 0); render(); };
+$('#copy').onclick = async () => {
+  const txt = '【ジェスチャー検知テストの結果】\n'
+    + EVENTS.map(e => `${e}: ${counts[e]}回`).join('\n')
+    + '\n\n--- 時系列 ---\n' + lines.slice().reverse().join('\n');
+  try{ await navigator.clipboard.writeText(txt); $('#copy').textContent = '✅ コピーしました'; }
+  catch(err){ $('#copy').textContent = '⚠️ 長押しで選択してコピーしてください'; }
+  setTimeout(() => $('#copy').textContent = '📋 記録をコピー', 2500);
+};
+render();
+</script>
+</body>
+</html>
