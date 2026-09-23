@@ -777,8 +777,8 @@ html[data-theme="dark"] .tag.c-u4,html[data-theme="dark"] .tag.c-u8{color:var(--
       <div class="mchip" data-m="lsn" title="英語の音声だけを聞いて意味を4択で選ぶ"><span class="ico">🎧</span>リスニング</div>
       <div class="mchip" data-m="dict" title="読み上げられた例文を聞いて、空欄に英語をタイプする"><span class="ico">✍️</span>ディクテーション</div>
       <div class="mchip" data-m="card" title="カードをめくって、思い出せたかを自分で申告する。1語2〜3秒で回せる"><span class="ico">🃏</span>カード</div>
-      <div class="mchip" data-m="mix" title="音声系を除く5形式をランダムに混ぜて出題"><span class="ico">🎲</span>ミックス</div>
     </div>
+    <p class="muted" id="modeNote" style="margin:8px 0 0"></p>
 
 
     <details class="more" id="moreBox">
@@ -802,11 +802,6 @@ html[data-theme="dark"] .tag.c-u4,html[data-theme="dark"] .tag.c-u8{color:var(--
       </div>
       <p class="muted" style="margin:-8px 0 14px">時間内に答えられないと不正解になり、自動で次の問題に進みます。</p>
       <p class="sec-label">表示・判定</p>
-      <div id="mixBox" style="display:none;margin:0 0 14px">
-        <p class="sec-label">🎲 ミックスに入れる形式（複数選択）</p>
-        <div class="row" style="gap:6px" id="mixRow"></div>
-        <p class="muted" id="mixInfo" style="margin:8px 0 0"></p>
-      </div>
       <p class="muted" id="mcNote" style="display:none;margin:0 0 10px;padding:9px 12px;background:var(--p4s);
         border:2px dashed var(--p4);border-radius:11px;font-weight:700"></p>
       <div class="grid2">
@@ -4520,23 +4515,29 @@ function renderHero(){
   $('#xpText').textContent=`${li.cur} / ${li.need} XP　（通算 ${S.xp||0} XP）`;
   $('#dayStreak').textContent=dayStreak();
 }
-function renderMixRow(){
-  const row=$('#mixRow'); if(!row) return;
-  row.innerHTML='';
-  MIX_ALL.forEach(m=>{
-    const b=document.createElement('button');
-    b.className='chip sm'+(mixSet().includes(m)?' on':'');
-    b.textContent=MODE_SHORT[m];
-    b.onclick=()=>{
-      const s=(C.mixSet||[]).slice(), i=s.indexOf(m);
-      if(i<0) s.push(m); else if(s.length>1) s.splice(i,1); else { toast('1つは選んでおいてください'); return; }
-      C.mixSet=MIX_ALL.filter(x=>s.includes(x)); save(); renderMixRow(); syncModeOpts(); refreshCond();
-    };
-    row.appendChild(b);
-  });
-  const mic=mixSet().some(m=>['spk','echo'].includes(m));
-  $('#mixInfo').innerHTML=`いま <b>${mixSet().length}形式</b>（${mixSet().map(m=>MODE_SHORT[m]).join('・')}）から出題します。`
-    + (mic?'　🎙 マイクを使う形式が含まれています。':'');
+/* いま選ばれている形式。1つだけならその形式、複数なら混ぜる形式の一覧。 */
+function selModes(){
+  if(C.mode==='card') return ['card'];
+  if(C.mode==='mix')  return mixSet();
+  return MIX_ALL.includes(C.mode) ? [C.mode] : ['type'];
+}
+/* 選択を保存する。保存の形はこれまでと同じにしておく。 */
+function setModes(arr){
+  if(arr.includes('card')){ C.mode='card'; return; }
+  const s=MIX_ALL.filter(m=>arr.includes(m));
+  C.mixSet = s.length ? s : ['type'];
+  C.mode   = C.mixSet.length>1 ? 'mix' : C.mixSet[0];
+}
+function renderModeGrid(){
+  const sel=selModes();
+  $$('#modeGrid .mchip').forEach(d=>d.classList.toggle('on', sel.includes(d.dataset.m)));
+  const note=$('#modeNote'); if(!note) return;
+  if(sel.length<2){
+    note.innerHTML='複数選ぶと、選んだ形式を順番に混ぜて出題します。';
+  }else{
+    note.innerHTML=`いま <b>${sel.length}形式</b>（${sel.map(m=>MODE_SHORT[m]).join('・')}）を順番に混ぜて出題します。`
+      + (sel.some(m=>m==='lsn'||m==='dict') ? '　🎧 音声を使う形式が入っています。' : '');
+  }
 }
 function syncModeOpts(){
   const m=C.mode, hideJa = (m==='mc'||m==='en4'||m==='lsn'||m==='dict'),
@@ -4549,8 +4550,7 @@ function syncModeOpts(){
       lab.title='意味→英語では文脈が必要なため常に表示します'; }
     else { el.disabled=false; el.checked=!!C[k]; lab.style.opacity=1; lab.title=''; }
   });
-  $('#mixBox').style.display = m==='mix' ? 'block' : 'none';
-  if(m==='mix') renderMixRow();
+  renderModeGrid();
   const note=$('#mcNote');
   const msg = m==='mc'  ? '🔘 意味を選ぶ問題なので「日本語の意味」「例文の和訳」は自動でオフになります（解答後の解説には表示されます）。'
             : m==='en4' ? '📝 Part 5 形式では日本語がヒントになってしまうため、意味・和訳は自動でオフになります。頭文字ヒントも出ません。'
@@ -4561,13 +4561,13 @@ function syncModeOpts(){
             : m==='order'? '🔀 読み上げを聞いて、単語カードを並べ替えて英文を作ります。カードを置くとその語だけ発音されます。'
             : m==='echo'? '🗣 読み上げられた例文をそのまま復唱します。正しく発音できた語だけ空欄が埋まります。「空欄に頭文字を入れておく」をオンにすると、各語の頭文字が薄く表示されます。'
             : recall    ? '🇯🇵 意味→英語では、どの文脈で使う語かを示すため「例文の和訳」を常に表示します。'
-            : mix       ? '🎲 混ぜる形式は下で選べます。4択・リスニング・ディクテーションの問題では日本語を自動で隠します。'
+            : mix       ? '🔀 選んだ形式を順番に混ぜて出題します。4択・リスニング・ディクテーションの問題では日本語を自動で隠します。'
             : '';
   note.style.display = msg?'block':'none'; note.textContent=msg;
 }
 function renderHome(){
   renderCats(); syncRange(); renderHero(); syncModeOpts();
-  $$('#modeGrid .mchip').forEach(d=>d.classList.toggle('on',d.dataset.m===C.mode));
+  renderModeGrid();
   $$('#orderRow .chip').forEach(b=>b.classList.toggle('on',b.dataset.o===C.order));
   $$('#limitRow .chip').forEach(b=>b.classList.toggle('on',+b.dataset.l===C.limit));
   $$('#qPresets .chip').forEach(b=>b.classList.toggle('on',+b.dataset.n===C.count));
@@ -4599,8 +4599,17 @@ function commitRange(which){
 $('#rgAll').onclick=()=>{ C.start=1; C.end=maxIndex(); syncRange(); save(); };
 $('#qPresets').onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; C.count=+b.dataset.n;
   $$('#qPresets .chip').forEach(x=>x.classList.toggle('on',x===b)); save(); refreshCond(); };
-$('#modeGrid').onclick=e=>{ const d=e.target.closest('.mchip'); if(!d) return; C.mode=d.dataset.m;
-  $$('#modeGrid .mchip').forEach(x=>x.classList.toggle('on',x===d));
+$('#modeGrid').onclick=e=>{ const d=e.target.closest('.mchip'); if(!d) return;
+  const m=d.dataset.m; let sel=selModes();
+  if(m==='card'){ sel=['card']; }                 // カードは自己申告なので単独で出す
+  else if(sel.includes('card')){ sel=[m]; }
+  else{
+    const i=sel.indexOf(m);
+    if(i<0) sel=sel.concat(m);
+    else if(sel.length>1) sel=sel.filter(x=>x!==m);
+    else { toast('1つは選んでおいてください'); return; }
+  }
+  setModes(sel);
   d.classList.add('bump'); setTimeout(()=>d.classList.remove('bump'),450);
   syncModeOpts(); save(); refreshCond(); };
 $('#orderRow').onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; C.order=b.dataset.o;
@@ -4642,7 +4651,7 @@ function startSession(list,over){
     const n = (C.count>0? Math.min(C.count,picked.length) : picked.length);
     picked = picked.slice(0,n);
     if(ord!=='random') picked=shuffle(picked);
-    items=picked.map(e=>({e, mode: over.mode || pickMode()}));
+    items=picked.map((e,i)=>({e, mode: over.mode || pickMode(i)}));
   }
   Q={ items, i:0, ok:0, ng:0, near:0, streak:0, best:0,
       t0:Date.now(), answered:false, wrongs:[], requeued:false, log:[], exam:over.exam||null };
@@ -4652,8 +4661,8 @@ function startSession(list,over){
   go('quiz'); renderQ();
   audWarmAhead(0, 3);          // 最初の並べ替え問題ぶんは、始めた時点で取っておく
 }
-function pickMode(){ const s=mixSet();
-  const m = C.mode==='mix' ? s[RNG()*s.length|0] : C.mode;
+function pickMode(i){ const s=selModes();
+  const m = s[(i||0) % s.length];       // 選んだ形式を順番に回す
   return MODE_LABEL[m] ? m : 'type';    // 廃止した形式が残っていてもタイピングに倒す
 }
 function hintPattern(sf){ return sf.replace(/[A-Za-z]/g,'_').replace(/ /g,'\u2002/\u2002'); }
@@ -6084,8 +6093,8 @@ const MODE_SHORT={type:'タイピング', mc:'意味4択', recall:'意味→英�
   dict:'ディクテ', card:'カード'};
 const MIX_ALL=['type','mc','recall','lsn','dict'];
 function mixSet(){ const s=C.mixSet||[]; const r=MIX_ALL.filter(m=>s.includes(m)); return r.length? r : ['type']; }
-function modeText(){ return C.mode==='mix'
-  ? `🎲 ミックス（${mixSet().map(m=>MODE_SHORT[m]).join('・')}）` : (MODE_LABEL[C.mode]||C.mode); }
+function modeText(){ const s=selModes();
+  return s.length>1 ? `🔀 ${s.map(m=>MODE_SHORT[m]).join('・')}` : (MODE_LABEL[s[0]]||s[0]); }
 /* カードの向き。表に何を出すか。 */
 const CARD_DIRS=[
   {v:'en', name:'英 → 日', tip:'英語を見て意味を思い出す'},
