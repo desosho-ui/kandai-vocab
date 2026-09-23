@@ -540,6 +540,9 @@ body.student .logo{flex:1}
 .fcdir{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;justify-content:center}
 .fchint{font-size:12.5px;color:var(--sub);font-weight:700;text-align:center;margin-top:10px}
 
+.voided{opacity:.45;pointer-events:none}
+.warnbox{background:var(--p2s);border:2px solid var(--edge);border-radius:14px;
+  padding:11px 14px;margin:10px 0 12px;font-size:13.5px;line-height:1.7;font-weight:700}
 .clsbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:var(--p1s);
   border:2px solid var(--edge);border-radius:14px;padding:9px 12px;margin-bottom:14px}
 .clsbar .cb-ic{font-size:20px;line-height:1}
@@ -1037,6 +1040,7 @@ html[data-theme="dark"] .tag.c-u4,html[data-theme="dark"] .tag.c-u8{color:var(--
       </div>
       <div id="exSndHelp"></div>
     </div>
+    <div class="warnbox">🚫 <b>解答中は、ほかのアプリや画面に切り替えないでください。</b><br>切り替えると、そのとき答えていた問題は<b>その場で不正解</b>になります。切り替えた回数は先生に記録されます。</div>
     <p class="muted" style="margin:6px 0 14px">解答を始めると途中で戻れません。準備ができたら開始してください。</p>
     <button class="btn go" id="exStart">テストを開始する ▶</button>
     <div id="exWho"></div>
@@ -4710,20 +4714,43 @@ function timeUp(){
   Q.timeouts=(Q.timeouts||0)+1;
   finish('ng', given, true);
 }
-/* タブを離れている間は時間を止める（不利にならないように） */
+/* テスト中に他のアプリや画面へ切り替えたら、その問題をその場で不正解にする。
+   手元の単語リストを覗く行為への対策。 */
+function voidCurrentQuestion(){
+  if(!Q || !Q.exam || Q.answered) return;
+  if(!$('#v-quiz').classList.contains('on')) return;
+  const mode = (Q.items[Q.i]||{}).mode;
+  Q.voided = (Q.voided||0)+1;
+  Q.__voidNow = true;
+  const inp=$('#ansInput');
+  if(inp){ try{ inp.classList.add('bad'); inp.blur(); }catch(e){} }
+  try{
+    if(mode==='card') gradeCard('ng');
+    else finish('ng','',false);
+  }catch(err){ Q.answered=true; }
+  /* もう入力できないことを見た目でもはっきりさせる */
+  ['#ansInput','#okBtn','#hintBtn','#skipBtn'].forEach(sel=>{
+    const el=$(sel); if(el){ el.disabled=true; el.classList.add('voided'); }
+  });
+}
+/* 自習中はタブを離れている間だけ時間を止める（不利にならないように） */
 document.addEventListener('visibilitychange',()=>{
-  if(!Q || Q.answered || !$('#v-quiz').classList.contains('on')) return;
+  if(!Q || !$('#v-quiz').classList.contains('on')) return;
   if(Q.exam){
-    /* 先生のテスト中は時計を止めない。離れていた時間も記録する。 */
-    if(document.hidden){ Q.__hid=Date.now(); }
-    else if(Q.__hid){
+    /* 先生のテスト中は時計を止めない。
+       離れた回数と時間を記録し、まだ答えていない問題は不正解にする。 */
+    if(document.hidden){
+      Q.__hid=Date.now();
+      Q.brk=(Q.brk||0)+1;               // 離れたら毎回1回として数える
+      voidCurrentQuestion();
+    }else if(Q.__hid){
       Q.away=(Q.away||0)+(Date.now()-Q.__hid);
-      if(Date.now()-Q.__hid>15000) Q.brk=(Q.brk||0)+1;    // 15秒以上離れたら中断1回
       Q.__hid=0;
-      if(typeof examSaveProgress==='function') examSaveProgress();
     }
+    if(typeof examSaveProgress==='function') examSaveProgress();
     return;
   }
+  if(Q.answered) return;
   if(!C.limit) return;
   if(document.hidden){ if(Q.tid){ clearInterval(Q.tid); Q.tid=null; } Q.rest=Math.max(0,Q.deadline-Date.now()); }
   else if(Q.rest!=null){ Q.deadline=Date.now()+Q.rest; Q.rest=null; startTimerResume(); }
@@ -4737,7 +4764,7 @@ function startTimerResume(){
 }
 
 function renderQ(){
-  const it=Q.items[Q.i], e=it.e; Q.answered=false; Q.hintUsed=false;
+  const it=Q.items[Q.i], e=it.e; Q.answered=false; Q.hintUsed=false; Q.__voidNow=false;
   Q.qT0 = Q.__resumeQT0 || Date.now();     // 再開のときは、前に表示した時刻をそのまま使う
   Q.__resumeQT0 = 0;
   if(Q.exam && typeof examSaveProgress==='function') examSaveProgress();
@@ -5745,13 +5772,15 @@ function finish(res,given,timedOut){
   const ansSub  = !diff ? '' : (isRecall ? `（例文中では ${e.sf}）` : `（見出し語は ${e.head}）`);
   const cls = res==='ok'?'ok':(res==='near'?'near':'ng');
   const OKW=['✅ 正解！','🎯 ナイス！','⚡️ さすが！','🔥 やるね！','💯 かんぺき！'];
-  const hd  = timedOut ? '⏰ 時間切れ'
+  const hd  = Q.__voidNow ? '🚫 この問題は無効になりました'
+            : timedOut ? '⏰ 時間切れ'
             : res==='ok'? OKW[Math.random()*OKW.length|0] : (res==='near'?'🟡 おしい！':'😵 ざんねん…');
   let extra='';
   if(res==='near'){ const g=norm(given);
     extra = (g===norm(e.head)&&e.sf&&norm(e.sf)!==norm(e.head))
       ? `<div class="lex">語形（活用・複数形）に注意。この文では <b>${esc(e.sf)}</b> の形になります。</div>`
       : `<div class="lex">スペルがあと1文字違いました。正確に書けるようにしておきましょう。</div>`; }
+  if(Q.__voidNow) extra += `<div class="lex">🚫 解答中に<b>ほかのアプリや画面に切り替えた</b>ため、この問題は不正解になりました。<br>切り替えた回数は先生の成績表に記録されます。</div>`;
   if(timedOut) extra += `<div class="lex">${C.limit}秒以内に答えられませんでした。${given?`（入力途中：<b>${esc(given)}</b>）`:''}</div>`;
   else if(res==='ng' && given){
     extra += `<div class="lex">あなたの解答：<b>${esc(given)}</b></div>`;
