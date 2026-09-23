@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<title>ジェスチャー検知テスト — VOCABMATE</title>
+<title>ジェスチャー検知テスト2 — VOCABMATE</title>
 <style>
 :root{--bg:#FFF6EC;--panel:#fff;--ink:#1E1B33;--sub:#77729B;--edge:#1E1B33;
       --line:#EFE9F8;--p1:#6C4DF6;--p1s:#EDE7FF;--p2:#FF4D9D;--p2s:#FFE6F1;
@@ -45,35 +45,41 @@ button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--edge)}
 .tags{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
 .tags button{background:var(--p2);font-size:13px;padding:12px 8px;text-align:left}
 .tags button.on{background:var(--p3)}
+#ans{width:100%;font:inherit;font-weight:800;padding:12px 14px;border-radius:13px;
+ border:2.5px solid var(--edge);background:var(--p3s);color:var(--ink);margin-top:8px}
 </style>
 </head>
 <body>
-<h1>📱 ジェスチャー検知テスト</h1>
-<p class="sub">iPhone で操作したとき、Webページに何のイベントが届くかを調べます。VOCABMATE 本体とは無関係で、記録も送信もしません。</p>
+<h1>📱 ジェスチャー検知テスト ②</h1>
+<p class="sub">前回は「①少し覗く／⑤コントロールセンター／⑥スクショ」で何も飛びませんでした。今回は<b>キーボードを出した状態</b>と<b>処理の止まり</b>という、別の手がかりを調べます。記録も送信もしません。</p>
 
 <div class="card">
-  <h2>やり方</h2>
-  <div class="note" style="margin-top:0">操作する<b>直前</b>に、その番号のボタンを押してください。押してから操作すると、どの操作で何が起きたかが記録に残ります。</div>
+  <h2>❶ まずここをタップしてキーボードを出す</h2>
+  <input id="ans" type="text" placeholder="ここをタップ（入力は不要です）" autocomplete="off" autocorrect="off" spellcheck="false">
+  <div class="note" style="margin-top:8px"><b>キーボードが出たまま</b>操作してください。下の番号ボタンはキーボードを閉じないように作ってあります。</div>
+</div>
+
+<div class="card">
+  <h2>❷ 操作する直前に番号を押す</h2>
   <div class="tags" id="tags"></div>
 </div>
 
 <div class="card">
   <h2>試してほしい操作</h2>
   <ol>
-    <li><b class="g">下から少しだけスワイプして止め、隣のアプリを覗いて戻す</b>（いちばん知りたい操作）</li>
-    <li>ホームバーを<b class="g">左右にスワイプ</b>して隣のアプリに移り、すぐ戻る</li>
-    <li>下から上に完全にスワイプして<b class="g">ホーム画面</b>に戻り、Safari に戻る</li>
-    <li>画面上から下に引いて<b class="g">通知センター</b>を開き、閉じる</li>
-    <li>右上から下に引いて<b class="g">コントロールセンター</b>を開き、閉じる</li>
+    <li><b class="g">ごく浅く覗く</b>：下から少しだけ持ち上げて、隣のアプリの端が見えたら戻す</li>
+    <li><b class="g">深めに覗く</b>：アプリ切替画面がはっきり出るまで持ち上げて、指を離さずそのまま戻す</li>
+    <li><b class="g">コントロールセンター</b>を開いて閉じる</li>
     <li><b class="g">スクリーンショット</b>を撮る（電源＋音量上）</li>
   </ol>
-  <div class="note">できれば ① は3回くらい、少し間をあけて繰り返してください。押し込む深さを変えて（浅め／アプリ切替画面が出るくらい）試していただけると助かります。</div>
+  <div class="note">①と②は、それぞれ<b>2〜3回ずつ</b>やってみてください。そのつど番号ボタンを押し直してください。</div>
 </div>
 
 <div class="card">
   <h2>いまの状態</h2>
   <div class="state">visibilityState：<span id="vs">—</span></div>
   <div class="state">hasFocus()：<span id="hf">—</span></div>
+  <div class="state">キーボード：<span id="kb">—</span></div>
 </div>
 
 <div class="card">
@@ -88,23 +94,25 @@ button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--edge)}
     <button id="copy">📋 記録をコピー</button>
     <button class="g" id="clear">クリア</button>
   </div>
-  <div class="note">コピーしてチャットに貼っていただければ、どの信号で検知できるか判断して本体に組み込みます。</div>
+  <div class="note">コピーしてチャットに貼ってください。</div>
 </div>
 
 <script>
-const EVENTS = ['visibilitychange','blur','focus','pagehide','pageshow',
-                'freeze','resume','resize','orientationchange',
-                'touchstart(下端)','touchcancel','hasFocus→false','hasFocus→true'];
+const EVENTS = ['入力欄blur','入力欄focus','処理が止まった','描画が止まった',
+                'visibilitychange','blur','focus','pagehide','freeze',
+                'resize','vv-resize','vv-scroll','touchcancel','hasFocus変化'];
 const counts = {}; EVENTS.forEach(e => counts[e] = 0);
 const t0 = Date.now();
 const lines = [];
 const $ = s => document.querySelector(s);
+const vv = window.visualViewport || null;
 
 function stamp(){ return ((Date.now()-t0)/1000).toFixed(2).padStart(7,' ') + 's'; }
 function log(name, detail){
   if(counts[name] !== undefined) counts[name]++;
+  rz = null;
   lines.unshift(`${stamp()}  ${name}${detail ? '  ' + detail : ''}`);
-  if(lines.length > 200) lines.pop();
+  if(lines.length > 300) lines.pop();
   render();
 }
 function render(){
@@ -117,49 +125,73 @@ function render(){
   const f = document.hasFocus();
   $('#hf').textContent = f ? 'true' : 'false';
   $('#hf').className = f ? 'ok' : 'ng';
+  const kb = document.activeElement === $('#ans');
+  $('#kb').textContent = kb ? '出ている（入力欄にフォーカス）' : '閉じている';
+  $('#kb').className = kb ? 'ok' : 'ng';
 }
 
+/* ---- 入力欄のフォーカス：試験中と同じ状態での手がかり ---- */
+$('#ans').addEventListener('blur',  () => log('入力欄blur'));
+$('#ans').addEventListener('focus', () => log('入力欄focus'));
+
+/* ---- ページ全体のイベント ---- */
 document.addEventListener('visibilitychange', () => log('visibilitychange', '→ ' + document.visibilityState));
 window.addEventListener('blur',  () => log('blur'));
 window.addEventListener('focus', () => log('focus'));
 window.addEventListener('pagehide', e => log('pagehide', 'persisted=' + e.persisted));
-window.addEventListener('pageshow', e => log('pageshow', 'persisted=' + e.persisted));
 document.addEventListener('freeze', () => log('freeze'));
-document.addEventListener('resume', () => log('resume'));
-/* resize は連続で何十回も飛ぶので、途切れるまでを1行にまとめる */
-let rz = null;
-window.addEventListener('resize', () => {
-  counts['resize']++;
-  const now = Date.now(), size = innerWidth + '×' + innerHeight;
-  if(rz && now - rz.t < 900 && lines[0] === rz.line){
-    rz.t = now; rz.n++; rz.to = size;
-    rz.line = `${rz.stamp}  resize ×${rz.n}  ${rz.from} → ${rz.to}`;
-    lines[0] = rz.line; render(); return;
-  }
-  rz = {t:now, n:1, from:size, to:size, stamp:stamp()};
-  rz.line = `${rz.stamp}  resize ×1  ${size}`;
-  lines.unshift(rz.line); if(lines.length > 300) lines.pop(); render();
-});
-window.addEventListener('orientationchange', () => log('orientationchange'));
-
-/* 画面下端から始まったタッチ＝ホームバーのジェスチャーの可能性 */
-window.addEventListener('touchstart', e => {
-  const y = e.touches[0] ? e.touches[0].clientY : 0;
-  if(y > innerHeight - 40) log('touchstart(下端)', 'y=' + Math.round(y));
-}, {passive:true});
 window.addEventListener('touchcancel', () => log('touchcancel'), {passive:true});
 
-/* イベントが飛ばない場合の保険として、フォーカス状態を細かく見張る */
+/* ---- resize は連続で飛ぶので1行にまとめる ---- */
+let rz = null;
+function bundle(key, size){
+  counts[key]++;
+  const now = Date.now();
+  if(rz && rz.key === key && now - rz.t < 900 && lines[0] === rz.line){
+    rz.t = now; rz.n++;
+    rz.line = `${rz.stamp}  ${key} ×${rz.n}  ${rz.from} → ${size}`;
+    lines[0] = rz.line; render(); return;
+  }
+  rz = {key, t:now, n:1, from:size, stamp:stamp()};
+  rz.line = `${rz.stamp}  ${key} ×1  ${size}`;
+  lines.unshift(rz.line); if(lines.length > 300) lines.pop(); render();
+}
+window.addEventListener('resize', () => bundle('resize', innerWidth + '×' + innerHeight));
+if(vv){
+  vv.addEventListener('resize', () => bundle('vv-resize',
+    Math.round(vv.width) + '×' + Math.round(vv.height) + ' scale=' + vv.scale.toFixed(2)));
+  vv.addEventListener('scroll', () => bundle('vv-scroll',
+    'top=' + Math.round(vv.offsetTop) + ' left=' + Math.round(vv.offsetLeft)));
+}
+
+/* ---- 処理が止まったか（タイマー） ---- */
+let tPrev = Date.now();
+setInterval(() => {
+  const now = Date.now(), gap = now - tPrev; tPrev = now;
+  if(gap > 350) log('処理が止まった', gap + 'ミリ秒');
+  else render();
+}, 100);
+
+/* ---- 描画が止まったか（アニメーションフレーム） ---- */
+let rPrev = performance.now();
+(function tick(){
+  const now = performance.now(), gap = now - rPrev; rPrev = now;
+  if(gap > 400) log('描画が止まった', Math.round(gap) + 'ミリ秒');
+  requestAnimationFrame(tick);
+})();
+
+/* ---- hasFocus の変化 ---- */
 let lastFocus = document.hasFocus();
 setInterval(() => {
   const f = document.hasFocus();
-  if(f !== lastFocus){ lastFocus = f; log(f ? 'hasFocus→true' : 'hasFocus→false'); }
-  else render();
-}, 200);
+  if(f !== lastFocus){ lastFocus = f; log('hasFocus変化', '→ ' + f); }
+}, 100);
 
-/* ---- 操作の目印 ---- */
-const TAGS = ['① 少し覗く','② 隣のアプリへ','③ ホーム画面','④ 通知センター','⑤ コントロールセンター','⑥ スクリーンショット'];
+/* ---- 操作の目印（押してもキーボードを閉じない） ---- */
+const TAGS = ['① ごく浅く覗く','② 深めに覗く','③ コントロールセンター','④ スクリーンショット'];
 $('#tags').innerHTML = TAGS.map((t,i) => `<button data-i="${i}">${t}</button>`).join('');
+$('#tags').addEventListener('pointerdown', e => { if(e.target.closest('button')) e.preventDefault(); });
+$('#tags').addEventListener('mousedown',   e => { if(e.target.closest('button')) e.preventDefault(); });
 $('#tags').addEventListener('click', e => {
   const b = e.target.closest('button'); if(!b) return;
   rz = null;
@@ -171,7 +203,7 @@ $('#tags').addEventListener('click', e => {
 
 $('#clear').onclick = () => { lines.length = 0; rz = null; EVENTS.forEach(e => counts[e] = 0); render(); };
 $('#copy').onclick = async () => {
-  const txt = '【ジェスチャー検知テストの結果】\n'
+  const txt = '【ジェスチャー検知テスト② の結果】\n'
     + EVENTS.map(e => `${e}: ${counts[e]}回`).join('\n')
     + '\n\n--- 時系列 ---\n' + lines.slice().reverse().join('\n');
   try{ await navigator.clipboard.writeText(txt); $('#copy').textContent = '✅ コピーしました'; }
