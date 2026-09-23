@@ -42,11 +42,20 @@ button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--edge)}
 .ok{color:var(--p3)}.ng{color:var(--p2)}
 .note{background:var(--p4s);border:2px solid var(--edge);border-radius:12px;
  padding:10px 12px;font-size:13px;margin-top:10px}
+.tags{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.tags button{background:var(--p2);font-size:13px;padding:12px 8px;text-align:left}
+.tags button.on{background:var(--p3)}
 </style>
 </head>
 <body>
 <h1>📱 ジェスチャー検知テスト</h1>
 <p class="sub">iPhone で操作したとき、Webページに何のイベントが届くかを調べます。VOCABMATE 本体とは無関係で、記録も送信もしません。</p>
+
+<div class="card">
+  <h2>やり方</h2>
+  <div class="note" style="margin-top:0">操作する<b>直前</b>に、その番号のボタンを押してください。押してから操作すると、どの操作で何が起きたかが記録に残ります。</div>
+  <div class="tags" id="tags"></div>
+</div>
 
 <div class="card">
   <h2>試してほしい操作</h2>
@@ -56,9 +65,9 @@ button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--edge)}
     <li>下から上に完全にスワイプして<b class="g">ホーム画面</b>に戻り、Safari に戻る</li>
     <li>画面上から下に引いて<b class="g">通知センター</b>を開き、閉じる</li>
     <li>右上から下に引いて<b class="g">コントロールセンター</b>を開き、閉じる</li>
-    <li><b class="g">電源ボタンで画面を消して</b>、また点ける</li>
+    <li><b class="g">スクリーンショット</b>を撮る（電源＋音量上）</li>
   </ol>
-  <div class="note">1つ操作するごとに、下の記録がどう増えるか見てください。何も増えない操作があれば、それが「検知できない操作」です。</div>
+  <div class="note">できれば ① は3回くらい、少し間をあけて繰り返してください。押し込む深さを変えて（浅め／アプリ切替画面が出るくらい）試していただけると助かります。</div>
 </div>
 
 <div class="card">
@@ -117,7 +126,20 @@ window.addEventListener('pagehide', e => log('pagehide', 'persisted=' + e.persis
 window.addEventListener('pageshow', e => log('pageshow', 'persisted=' + e.persisted));
 document.addEventListener('freeze', () => log('freeze'));
 document.addEventListener('resume', () => log('resume'));
-window.addEventListener('resize', () => log('resize', innerWidth + '×' + innerHeight));
+/* resize は連続で何十回も飛ぶので、途切れるまでを1行にまとめる */
+let rz = null;
+window.addEventListener('resize', () => {
+  counts['resize']++;
+  const now = Date.now(), size = innerWidth + '×' + innerHeight;
+  if(rz && now - rz.t < 900 && lines[0] === rz.line){
+    rz.t = now; rz.n++; rz.to = size;
+    rz.line = `${rz.stamp}  resize ×${rz.n}  ${rz.from} → ${rz.to}`;
+    lines[0] = rz.line; render(); return;
+  }
+  rz = {t:now, n:1, from:size, to:size, stamp:stamp()};
+  rz.line = `${rz.stamp}  resize ×1  ${size}`;
+  lines.unshift(rz.line); if(lines.length > 300) lines.pop(); render();
+});
 window.addEventListener('orientationchange', () => log('orientationchange'));
 
 /* 画面下端から始まったタッチ＝ホームバーのジェスチャーの可能性 */
@@ -135,7 +157,19 @@ setInterval(() => {
   else render();
 }, 200);
 
-$('#clear').onclick = () => { lines.length = 0; EVENTS.forEach(e => counts[e] = 0); render(); };
+/* ---- 操作の目印 ---- */
+const TAGS = ['① 少し覗く','② 隣のアプリへ','③ ホーム画面','④ 通知センター','⑤ コントロールセンター','⑥ スクリーンショット'];
+$('#tags').innerHTML = TAGS.map((t,i) => `<button data-i="${i}">${t}</button>`).join('');
+$('#tags').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  rz = null;
+  lines.unshift(`${stamp()}  ━━━━━ ${TAGS[b.dataset.i]} ━━━━━`);
+  [...$('#tags').children].forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  render();
+});
+
+$('#clear').onclick = () => { lines.length = 0; rz = null; EVENTS.forEach(e => counts[e] = 0); render(); };
 $('#copy').onclick = async () => {
   const txt = '【ジェスチャー検知テストの結果】\n'
     + EVENTS.map(e => `${e}: ${counts[e]}回`).join('\n')
