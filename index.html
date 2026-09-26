@@ -5859,7 +5859,13 @@ function next(){
   if(isPhone()) scrollToEl($('#quizPlay'),'start');
 }
 $('#quitBtn').onclick=()=>{ stopTimer();
-  if(confirm('セッションを中断しますか？（ここまでの記録は保存されます）')) endSession();
+  let msg='セッションを中断しますか？（ここまでの記録は保存されます）';
+  if(Q && Q.exam){
+    const rest=Math.max(0, Q.items.length-Q.log.length);
+    msg = rest ? `ここで提出しますか？\n残りの ${rest} 問は不正解になります。`
+               : 'ここで提出しますか？';
+  }
+  if(confirm(msg)) endSession();
   else if(!Q.answered) startTimer(); };
 
 function endSession(){
@@ -6950,14 +6956,19 @@ function examFinish(){
   examClearProgress();                       // 途中経過はもう要らない
   examRestore();                             // 学生自身の設定に戻す
   const ex=Q.exam, cfg=ex.cfg, who=ex.who;
-  const total=Q.log.length, ok=Q.log.filter(x=>x.res==='ok').length;
+  /* 分母は出題数そのもの。途中でやめても時間切れでも、
+     答えていない問題は不正解として数える。 */
+  const total=Q.items.length, done=Q.log.length;
+  const ok=Q.log.filter(x=>x.res==='ok').length;
   const near=Q.log.filter(x=>x.res==='near').length;
   const sec=Math.round((Date.now()-Q.t0)/1000);
   const rate=total?Math.round(ok/total*100):0;
   const rec2={v:1, t:cfg.id, ti:cfg.title, c:who.cls, n:who.name, s:who.sid,
     q:total, o:ok, e:near, r:rate, sec, at:Date.now(),
+    un:Math.max(0,total-done),                           // 未解答の数
     bk:Q.brk||0, aw:Math.round((Q.away||0)/1000),        // 中断回数 / 離席の秒数
-    d:Q.log.map((x,i)=>[Q.items[i]?Q.items[i].e.id:0, x.res==='ok'?1:(x.res==='near'?2:0)])};
+    d:Q.items.map((it,i)=>{ const x=Q.log[i];
+      return [it.e.id, x ? (x.res==='ok'?1:(x.res==='near'?2:0)) : 3]; })};
   /* 解き終わった結果を残しておく。
      「おつかれさまでした」の画面でリフレッシュされても、
      テストが最初からになるのではなく、この結果画面に戻ってくる。 */
@@ -6987,6 +6998,7 @@ function examShowDone(cfg, who, rec2){
      <div class="stats" style="margin:14px 0">
        <div class="stat"><div class="v" style="color:var(--p1)">${rate}%</div><div class="l">正答率</div></div>
        <div class="stat"><div class="v">${ok}<span style="font-size:15px">/${total}</span></div><div class="l">正解数</div></div>
+       ${rec2.un ? `<div class="stat"><div class="v" style="color:var(--p2)">${rec2.un}</div><div class="l">未解答</div></div>` : ''}
        <div class="stat"><div class="v">${Math.floor(sec/60)}<span style="font-size:14px">分</span>${sec%60}<span style="font-size:14px">秒</span></div><div class="l">所要時間</div></div>
      </div>
      <div class="condtarget"><b>${esc(who.cls)}</b>　${esc(who.name)}（${esc(who.sid)}）</div>
