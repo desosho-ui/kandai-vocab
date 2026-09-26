@@ -540,6 +540,9 @@ body.student .logo{flex:1}
 .fcdir{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;justify-content:center}
 .fchint{font-size:12.5px;color:var(--sub);font-weight:700;text-align:center;margin-top:10px}
 
+.fcard .fcplay{background:none;border:0;cursor:pointer;font-size:34px;line-height:1.3;padding:0}
+.fcard .fcplay:active{transform:scale(.9)}
+.fcdir .chip.snd{margin-left:8px}
 .clsbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:var(--p1s);
   border:2px solid var(--edge);border-radius:14px;padding:9px 12px;margin-bottom:14px}
 .clsbar .cb-ic{font-size:20px;line-height:1}
@@ -4959,13 +4962,14 @@ function renderQ(){
     const heads=headText(e);
     const front = dir==='ja' ? `<div class="fc-main">${esc(e.mean)}</div>`
                                  + (e.pos?`<div class="fc-pos">${esc(e.pos)}</div>`:'')
-                : dir==='lsn' ? `<div class="fc-main">🔊</div>
-                                 <div class="fc-pos">音を聞いて、意味を思い出そう</div>`
+                : dir==='lsn' ? `<div class="fc-main"><button class="fcplay" id="fcPlay" title="もう一度聞く">🔊</button></div>
+                                 <div class="fc-pos">音を聞いて、意味を思い出そう<br>${cardSnd()?'🔊 を押すと、もう一度聞けます':'🔊 を押すと、音が鳴ります'}</div>`
                 : `<div class="fc-main">${esc(heads)}</div>`
                   + (e.pos?`<div class="fc-pos">${esc(e.pos)}</div>`:'');
     body.innerHTML =
       `<div class="fcdir" id="fcDir">`
       + CARD_DIRS.map(d=>`<button class="chip sm${d.v===dir?' on':''}" data-d="${d.v}" title="${esc(d.tip)}">${d.name}</button>`).join('')
+      + `<button class="chip sm snd${cardSnd()?' on':''}" id="fcSnd" title="カードが出たときに自動で読み上げるかどうか。切っても 🔊 と S キーでは聞けます">${cardSnd()?'🔊 音あり':'🔇 音なし'}</button>`
       + `</div>
          <div class="fcard" id="fcCard">
            ${front}
@@ -4975,10 +4979,20 @@ function renderQ(){
            わからなければ <b>もう一度</b> を押してください。すぐまた出てきます。</div>`;
 
     const say=()=>{ if(dir==='ja') return; speakHead(e); };
-    if(dir!=='ja') setTimeout(say, 200);
+    if(dir!=='ja' && cardSnd()) setTimeout(say, 200);
 
     $('#fcDir').onclick=ev=>{ const b=ev.target.closest('[data-d]'); if(!b) return;
       C.cardDir=b.dataset.d; save(); renderQ(); };
+    const sndBtn=$('#fcSnd');
+    if(sndBtn) sndBtn.onclick=ev=>{ ev.stopPropagation();
+      C.cardSnd = !cardSnd(); save();
+      sndBtn.classList.toggle('on', cardSnd());
+      sndBtn.textContent = cardSnd() ? '🔊 音あり' : '🔇 音なし';
+      /* 入れ直したときは、いま出ているカードをその場で読み上げる */
+      if(cardSnd() && !Q.__flipped && dir!=='ja') speakHead(e);
+    };
+    const playBtn=$('#fcPlay');
+    if(playBtn) playBtn.onclick=ev=>{ ev.stopPropagation(); speakHead(e); };
 
     const flip=()=>{
       if(Q.answered || Q.__flipped) return;
@@ -4993,7 +5007,7 @@ function renderQ(){
          <div class="fc-ex">${revealHTML(e,false)}</div>
          ${C.ja&&e.ja?`<div class="fc-ja">${esc(e.ja)}</div>`:''}`;
       $('#fcSpk').onclick=ev=>{ ev.stopPropagation(); speakEntry(e,'recall'); };
-      if(dir==='ja') speakHead(e);
+      if(dir==='ja' && cardSnd()) speakHead(e);
       const row=document.createElement('div');
       row.className='fcrow';
       row.innerHTML=
@@ -6108,6 +6122,8 @@ const CARD_DIRS=[
   {v:'lsn', name:'音声 → 意味', tip:'音だけを聞いて意味を思い出す'}
 ];
 function cardDir(){ const v=C.cardDir||'en'; return CARD_DIRS.some(d=>d.v===v)?v:'en'; }
+/* カードが出たときに自動で読み上げるか。既定は読み上げる。 */
+function cardSnd(){ return C.cardSnd!==false; }
 const ORDER_LABEL={random:'ランダム', srs:'復習期限が近い順', weak:'苦手な順',
   new:'未学習を優先', old:'久しぶりの順'};
 const FILTER_LABEL={star:'⭐ ★をつけた語', wrong:'😵 間違えたことがある語', due:'🔔 今日が復習日の語',
